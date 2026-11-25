@@ -3,10 +3,13 @@
  *
  * Internal, so it can't be called from the browser. It writes rows directly,
  * skipping the request rules, so it can create an overdue loan for testing
- * the reminder workflow. No notifications are queued for seeded loans.
+ * the reminder workflow. The pending request queues a "loan.requested"
+ * notification like a real request would, so the notification workflow can be
+ * tried without signing in.
  */
 import { internalMutation } from "./_generated/server";
 import { addDays, todayUtc } from "./lib/dates";
+import { enqueueLoanEvent } from "./lib/outbox";
 
 export const demo = internalMutation({
   args: {},
@@ -62,6 +65,7 @@ export const demo = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    await enqueueLoanEvent(ctx, pendingLoan, "loan.requested");
     return { alice, bob, overdueLoan, pendingLoan };
   },
 });

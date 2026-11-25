@@ -1,0 +1,60 @@
+# Local n8n for LendLoop, plus Mailpit as a fake mail server so reminder and
+# notification emails can be read at http://localhost:8025 without sending
+# anything to real inboxes.
+#
+#   cp n8n/.env.example n8n/.env   # then fill in the secrets
+#   docker compose up -d
+#   ./n8n/import.sh         # imports and publishes the workflows
+#
+# Both services bind to 127.0.0.1 only.
+
+name: lendloop
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.49.6
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    # Secrets (N8N_ENCRYPTION_KEY, LENDLOOP_HMAC_SECRET) and the Convex URL come
+    # from n8n/.env, which is gitignored. See n8n/.env.example.
+    env_file:
+      - path: ./n8n/.env
+        required: true
+    environment:
+      # The Code nodes read LENDLOOP_* values through $env and use node:crypto
+      # for HMAC. Both are blocked by default in n8n 2.x.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      GENERIC_TIMEZONE: UTC
+      TZ: UTC
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      N8N_WEBHOOK_URL: http://localhost:5678/
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      # Keep a week of executions so failures can be inspected in the UI.
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+    extra_hosts:
+      # Docker Desktop provides this name already; this line makes Linux match.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/import/workflows:ro
+      - ./n8n/credentials:/import/credentials:ro
+    depends_on:
+      - mailpit
+
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025" # web inbox
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+volumes:
+  n8n_data:

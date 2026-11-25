@@ -42,20 +42,22 @@ function cleanToolInput(input: { name: string; description: string }) {
 }
 
 /**
- * Public, unauthenticated list for the landing page. Returns name, category
- * and availability only: no ids, owners, descriptions or dates.
+ * Public, unauthenticated list for the landing page: tools that are not out
+ * on loan today, with name and category only. No ids, owners, descriptions,
+ * conditions or dates.
  */
 export const listPublic = query({
   args: {},
   handler: async (ctx) => {
     const today = todayUtc();
     const tools = await ctx.db.query("tools").order("desc").take(MAX_TOOLS_LISTED);
-    return await Promise.all(
+    const visible = await Promise.all(
       tools.map(async (tool) => {
         const { approved } = await openLoans(ctx, tool._id);
-        return { name: tool.name, category: tool.category, available: !isOutOnLoan(approved, today) };
+        return isOutOnLoan(approved, today) ? null : { name: tool.name, category: tool.category };
       }),
     );
+    return visible.filter((tool) => tool !== null);
   },
 });
 

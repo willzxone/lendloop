@@ -1,0 +1,330 @@
+{
+  "id": "lendloopNotify01",
+  "name": "LendLoop: loan notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Loan notifications\nConvex POSTs here when a loan request is created, approved, declined or returned.\n\n1. **Verify signature**: HMAC-SHA256 over `timestamp.rawBody` with `LENDLOOP_HMAC_SECRET`, 5 minute window. Anything else gets a 401.\n2. **Already sent?**: Convex retries until it gets a 2xx, so event ids already emailed are answered with 200 and skipped.\n3. The email goes to Mailpit locally (http://localhost:8025).\n\nIf sending fails after retries the execution fails, Convex gets a 500 and retries with backoff, and the error workflow reports the failure to Convex.",
+        "width": 520,
+        "height": 340
+      },
+      "id": "e41f6414-2749-5a48-a452-ae03fb0b00c9",
+      "name": "About this workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-notify",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "5f94c5ff-0123-543c-bd5d-9e61be7578f5",
+      "name": "Loan event from Convex",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        100
+      ],
+      "webhookId": "6f1c2a5e-4d1b-4f8e-9a51-1f0d6c3b7a01"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Checks that the request really came from Convex before anything else runs.\n// The signature covers the exact bytes Convex sent (the raw body, not a\n// re-serialised copy) plus the timestamp, and old timestamps are refused so a\n// captured request cannot be replayed later.\nconst crypto = require('crypto');\n\nconst MAX_SKEW_SECONDS = 300;\nconst EVENTS = ['loan.requested', 'loan.approved', 'loan.declined', 'loan.returned'];\n\nconst secret = $env.LENDLOOP_HMAC_SECRET;\nif (!secret || secret.length < 32) {\n  // A configuration problem, not a bad request: fail the execution so the\n  // error workflow reports it and Convex retries later.\n  throw new Error('LENDLOOP_HMAC_SECRET is missing or shorter than 32 characters in the n8n container.');\n}\n\nconst reject = (reason) => [{ json: { valid: false, reason } }];\n\nconst headers = $input.first().json.headers ?? {};\nconst timestamp = headers['x-lendloop-timestamp'];\nconst signature = headers['x-lendloop-signature'];\nif (typeof timestamp !== 'string' || typeof signature !== 'string') return reject('missing_headers');\nif (!/^\\d{1,12}$/.test(timestamp) || !/^[0-9a-f]{64}$/.test(signature)) return reject('bad_signature');\nif (Math.abs(Date.now() / 1000 - Number(timestamp)) > MAX_SKEW_SECONDS) return reject('expired');\n\nconst rawBody = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst expected = crypto.createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest();\nif (!crypto.timingSafeEqual(expected, Buffer.from(signature, 'hex'))) return reject('bad_signature');\n\n// Signed by Convex, but still check the shape before using it.\nlet payload;\ntry {\n  payload = JSON.parse(rawBody);\n} catch {\n  return reject('invalid_json');\n}\nconst { eventId, event, loan, recipient } = payload ?? {};\nconst isText = (value) => typeof value === 'string' && value.length > 0 && value.length <= 200;\nif (\n  !isText(eventId) || !EVENTS.includes(event) ||\n  !isText(loan?.toolName) || !isText(loan?.startDate) || !isText(loan?.endDate) ||\n  !isText(recipient?.name) || !isText(recipient?.email)\n) {\n  return reject('invalid_payload');\n}\n\n// Convex retries if it never saw our 200 (timeout, restart). Remember which\n// events were already emailed so a retry does not email the person twice.\nconst sent = $getWorkflowStaticData('global').sentEventIds ?? {};\nreturn [{ json: { valid: true, duplicate: Boolean(sent[eventId]), payload } }];\n"
+      },
+      "id": "fe212297-5f5a-5ae1-94a5-1dbbaabd4613",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "05b2bb65-be90-5c9b-8a67-49c5f25eedba",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f9532af6-c8d7-53ed-9f1e-7615fa9fbd1f",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"invalid_signature\" } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "612a0425-7181-531f-91e0-65b969701a41",
+      "name": "Reject (401)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5bb298ae-7447-5351-97a5-aeaca8a7f334",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1b19686f-00d0-5c5b-941a-de20c628df0d",
+      "name": "Already sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"duplicate\": true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d6730d2b-5e0c-5322-87e8-d3de3fbe930b",
+      "name": "Acknowledge duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One short plain-text email. Only the fields Convex sent are available here:\n// recipient name and email, tool name, dates and the event.\nconst { event, loan, recipient } = $input.first().json.payload;\nconst appUrl = $env.LENDLOOP_APP_URL || 'http://localhost:3000';\nconst dates = loan.startDate === loan.endDate ? loan.startDate : `${loan.startDate} to ${loan.endDate}`;\n\nconst messages = {\n  'loan.requested': {\n    subject: `New request to borrow your ${loan.toolName}`,\n    body: `Someone would like to borrow your ${loan.toolName} (${dates}).\\nApprove or decline it here: ${appUrl}/incoming`,\n  },\n  'loan.approved': {\n    subject: `Approved: ${loan.toolName}`,\n    body: `Your request to borrow the ${loan.toolName} (${dates}) was approved.\\nDetails: ${appUrl}/requests`,\n  },\n  'loan.declined': {\n    subject: `Declined: ${loan.toolName}`,\n    body: `Your request to borrow the ${loan.toolName} (${dates}) was declined.\\nOther tools: ${appUrl}/tools`,\n  },\n  'loan.returned': {\n    subject: `Returned: ${loan.toolName}`,\n    body: `The ${loan.toolName} (${dates}) has been marked as returned. Thanks for bringing it back.`,\n  },\n};\n\nconst { subject, body } = messages[event];\nreturn [{\n  json: {\n    to: recipient.email,\n    subject,\n    text: `Hi ${recipient.name},\\n\\n${body}\\n\\nLendLoop`,\n  },\n}];\n"
+      },
+      "id": "8ffe47dd-5dc1-5d52-9ee9-abb8c8e089e6",
+      "name": "Write email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.LENDLOOP_MAIL_FROM }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "b3cd75f5-4a9a-5be7-960b-0c1cc4696925",
+      "name": "Send email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        80
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "lendloopMailpit1",
+          "name": "Mailpit (local SMTP)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Record the event as emailed (see \"Verify signature\"), keeping 14 days of ids.\nconst KEEP_MS = 14 * 24 * 60 * 60 * 1000;\nconst { eventId } = $('Verify signature').first().json.payload;\n\nconst staticData = $getWorkflowStaticData('global');\nconst sent = staticData.sentEventIds ?? {};\nconst now = Date.now();\nfor (const [id, at] of Object.entries(sent)) {\n  if (now - at > KEEP_MS) delete sent[id];\n}\nsent[eventId] = now;\nstaticData.sentEventIds = sent;\n\nreturn [{ json: { eventId } }];\n"
+      },
+      "id": "47cb5616-b534-559c-bb42-cdeb2e516d7c",
+      "name": "Remember event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "637d5d3e-4fba-5295-8bbb-d49982f3e5e4",
+      "name": "Acknowledge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Loan event from Convex": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Already sent?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject (401)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already sent?": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write email": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email": {
+      "main": [
+        [
+          {
+            "node": "Remember event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remember event": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "lendloopErrors01"
+  },
+  "pinData": {},
+  "tags": []
+}

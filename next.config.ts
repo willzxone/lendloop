@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Don't write an AGENTS.md into the repo on `next dev`.
+  agentRules: false,
   async headers() {
     return [
       {
@@ -16,6 +18,9 @@ const nextConfig: NextConfig = {
     ];
   },
   turbopack: {
+    // Pin the workspace root to this folder so a lockfile in a parent
+    // directory is never picked up.
+    root: process.cwd(),
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],

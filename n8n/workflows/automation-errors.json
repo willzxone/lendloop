@@ -1,0 +1,115 @@
+{
+  "id": "lendloopErrors01",
+  "name": "LendLoop: automation errors",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Automation errors\nSet as the error workflow of the other two LendLoop workflows.\n\nSends a signed report (workflow, execution id, failed node, message) to Convex `/n8n/automation-errors`. Admins see these on the Admin page under \"Automation failures\", next to notifications Convex gave up on.\n\nThe execution itself also stays in n8n's Executions list.",
+        "width": 500,
+        "height": 280
+      },
+      "id": "e41f6414-2749-5a48-a452-ae03fb0b00c9",
+      "name": "About this workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -340
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0e1b7c74-e349-56e2-a615-1f88742af34f",
+      "name": "When a LendLoop workflow fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// Same scheme as convex/lib/hmac.ts:\n//   X-LendLoop-Signature = hex(HMAC-SHA256(secret, `${timestamp}.${rawBody}`))\nfunction sign(rawBody) {\n  const secret = $env.LENDLOOP_HMAC_SECRET;\n  if (!secret || secret.length < 32) {\n    throw new Error('LENDLOOP_HMAC_SECRET is missing or shorter than 32 characters in the n8n container.');\n  }\n  const timestamp = String(Math.floor(Date.now() / 1000));\n  const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');\n  return { timestamp, signature };\n}\n\n// n8n runs this workflow when the notification or reminder workflow fails.\n// Convex stores the report (deduplicated by execution id) and admins see it\n// on the Admin page, so failures do not stay hidden inside n8n.\nconst { execution = {}, workflow = {}, trigger } = $input.first().json;\nconst error = execution.error ?? trigger?.error ?? {};\n\nconst report = {\n  workflowId: String(workflow.id ?? 'unknown'),\n  workflowName: String(workflow.name ?? 'unknown'),\n  // Trigger failures have no execution id; use a timestamp so each is kept.\n  executionId: String(execution.id ?? `trigger-${Date.now()}`),\n  failedNode: execution.lastNodeExecuted ?? error.node?.name,\n  message: String(error.message ?? 'Unknown error').slice(0, 1000),\n};\n\nconst rawBody = JSON.stringify(report);\nreturn [{ json: { rawBody, ...sign(rawBody) } }];\n"
+      },
+      "id": "3e1160b3-6ac8-5a5d-9ab8-9ed6928bacec",
+      "name": "Build signed report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/n8n/automation-errors",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-LendLoop-Timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "X-LendLoop-Signature",
+              "value": "={{ $json.signature }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.rawBody }}"
+      },
+      "id": "ff95ef57-755a-56e0-b9f9-47b4590f283f",
+      "name": "Report to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "When a LendLoop workflow fails": {
+      "main": [
+        [
+          {
+            "node": "Build signed report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build signed report": {
+      "main": [
+        [
+          {
+            "node": "Report to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": []
+}

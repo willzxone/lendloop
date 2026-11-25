@@ -85,7 +85,14 @@ describe("auth and roles", () => {
   it("the public list exposes no owner or id fields", async () => {
     const { t } = await setup();
     const tools = await t.query(api.tools.listPublic, {});
-    expect(tools).toEqual([{ name: "Cordless drill", category: "Power tools", available: true }]);
+    expect(tools).toEqual([{ name: "Cordless drill", category: "Power tools" }]);
+  });
+
+  it("the public list hides tools that are out on loan today", async () => {
+    const { t, alice, bob, toolId, today } = await setup();
+    const loanId = await bob.mutation(api.loans.request, { toolId, startDate: today, endDate: today });
+    await alice.mutation(api.loans.approve, { loanId });
+    expect(await t.query(api.tools.listPublic, {})).toEqual([]);
   });
 });
 

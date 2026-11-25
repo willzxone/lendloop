@@ -1,21 +1,14 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
 /**
- * Sends signed-out visitors on app pages to sign-in. This is a convenience
- * only: every Convex function checks the caller itself, so a request that
- * skips this proxy still gets nothing it is not allowed to see.
+ * Lets Clerk keep the session cookie fresh and makes `auth()` available.
+ *
+ * It does not guard routes. The app pages hold no data of their own: they
+ * render a sign-in prompt for signed-out visitors (components/RequireUser.tsx),
+ * and every Convex function checks the caller's identity and role itself, so
+ * there is nothing to protect at the routing layer.
  */
-const isAppRoute = createRouteMatcher([
-  "/tools(.*)",
-  "/listings(.*)",
-  "/requests(.*)",
-  "/incoming(.*)",
-  "/admin(.*)",
-]);
-
-export default clerkMiddleware(async (auth, request) => {
-  if (isAppRoute(request)) await auth.protect();
-});
+export default clerkMiddleware();
 
 export const config = {
   matcher: [

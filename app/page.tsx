@@ -7,7 +7,7 @@ export default function HomePage() {
       <PublicHero />
       <section aria-labelledby="available-heading">
         <h2 id="available-heading" className="mb-3 text-lg font-semibold text-stone-900">
-          Tools on the board
+          Available now
         </h2>
         <PublicToolList />
       </section>
