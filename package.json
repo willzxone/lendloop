@@ -1,0 +1,40 @@
+{
+  "name": "lendloop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:convex": "convex dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "n8n:up": "docker compose --env-file .env up -d",
+    "n8n:import": "./n8n/import.sh",
+    "verify:e2e": "node scripts/verify-e2e.mjs"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^7.10.9",
+    "convex": "^1.51.0",
+    "next": "16.4.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@tailwindcss/turbopack": "4.3.3",
+    "@types/node": "^24.19.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "convex-test": "^0.0.75",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.6",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5",
+    "vitest": "^5.1.2"
+  },
+  "engines": {
+    "node": ">=20.9"
+  }
+}
