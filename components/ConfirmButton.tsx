@@ -9,24 +9,30 @@ export function ConfirmButton({
   confirmLabel,
   onConfirm,
   disabled,
+  size = "md",
 }: {
   children: ReactNode;
   confirmLabel: string;
   onConfirm: () => void;
   disabled?: boolean;
+  size?: "sm" | "md";
 }) {
   const [confirming, setConfirming] = useState(false);
   if (!confirming) {
     return (
-      <Button variant="danger" disabled={disabled} onClick={() => setConfirming(true)}>
+      <Button size={size} variant="danger" disabled={disabled} onClick={() => setConfirming(true)}>
         {children}
       </Button>
     );
   }
   return (
-    <span className="inline-flex gap-2">
+    <span className="inline-flex gap-1.5">
+      <Button size={size} variant="ghost" onClick={() => setConfirming(false)}>
+        Cancel
+      </Button>
       <Button
-        variant="danger"
+        size={size}
+        variant="dangerSolid"
         disabled={disabled}
         onClick={() => {
           setConfirming(false);
@@ -34,9 +40,6 @@ export function ConfirmButton({
         }}
       >
         {confirmLabel}
-      </Button>
-      <Button variant="ghost" onClick={() => setConfirming(false)}>
-        Cancel
       </Button>
     </span>
   );

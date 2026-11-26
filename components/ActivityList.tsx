@@ -4,34 +4,43 @@ import type { FunctionReturnType } from "convex/server";
 import type { api } from "@/convex/_generated/api";
 import { activityLabel, relativeTime } from "@/lib/format";
 import { useNow } from "@/lib/useNow";
+import { BellIcon } from "./icons";
 
 type Activity = FunctionReturnType<typeof api.loans.myRequests>[number]["activity"];
 
-const dotColour = {
-  pending: "bg-stone-400",
-  retrying: "bg-amber-500",
-  sent: "bg-emerald-600",
-  failed: "bg-red-600",
+export const ACTIVITY_DOT = {
+  pending: "bg-zinc-300 ring-zinc-100",
+  retrying: "bg-amber-500 ring-amber-100",
+  sent: "bg-emerald-500 ring-emerald-100",
+  failed: "bg-red-500 ring-red-100",
 } as const;
 
-/** Recent automation for one loan, e.g. "Overdue reminder sent · 2 days ago". */
+/** Recent automation for one loan, as a small timeline ("Overdue reminder sent · 2 days ago"). */
 export function ActivityList({ activity }: { activity: Activity }) {
   const now = useNow();
   if (activity.length === 0) return null;
   return (
-    <ul aria-label="Automation activity" className="mt-3 space-y-1 border-t border-stone-100 pt-3">
-      {activity.map((item) => (
-        <li key={item.id} className="flex items-start gap-2 text-xs text-stone-600">
-          <span aria-hidden className={`mt-1 size-1.5 shrink-0 rounded-full ${dotColour[item.status]}`} />
-          <span>
-            {activityLabel(item)} · {relativeTime(item.at, now)}
-            {item.status === "retrying" && item.nextAttemptAt && (
-              <> · next try {relativeTime(item.nextAttemptAt, now)}</>
-            )}
-            {item.error && <span className="block text-red-700">{item.error}</span>}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="mt-4 rounded-xl bg-zinc-50 px-3.5 py-3 ring-1 ring-inset ring-zinc-950/[0.04]">
+      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
+        <BellIcon className="size-3" />
+        Notifications
+      </p>
+      <ul aria-label="Automation activity" className="relative space-y-2">
+        <span aria-hidden className="absolute top-1.5 bottom-1.5 left-[3px] w-px bg-zinc-200" />
+        {activity.map((item) => (
+          <li key={item.id} className="relative flex items-start gap-3 text-[13px] text-zinc-600">
+            <span aria-hidden className={`mt-1.5 size-[7px] shrink-0 rounded-full ring-2 ${ACTIVITY_DOT[item.status]}`} />
+            <span className="min-w-0">
+              <span className="text-zinc-800">{activityLabel(item)}</span>
+              <span className="text-zinc-400"> · {relativeTime(item.at, now)}</span>
+              {item.status === "retrying" && item.nextAttemptAt && (
+                <span className="text-zinc-400"> · next try {relativeTime(item.nextAttemptAt, now)}</span>
+              )}
+              {item.error && <span className="mt-0.5 block text-xs text-red-600">{item.error}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

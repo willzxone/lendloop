@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Keep the dev-mode badge away from the sidebar logo.
+  devIndicators: { position: "bottom-right" },
   // Don't write an AGENTS.md into the repo on `next dev`.
   agentRules: false,
   async headers() {

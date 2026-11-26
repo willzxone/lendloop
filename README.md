@@ -21,7 +21,8 @@ Production notes are in [PRODUCTION.md](PRODUCTION.md).
 
 **Signed-in users** can:
 
-- browse all tools with their availability, filtered by category (`/tools`), and ask to borrow one for a date range;
+- start from an overview (`/dashboard`): requests waiting for an answer, tools out on loan and anything overdue, with recent automation activity;
+- browse all tools with their availability, search them and filter by category (`/tools`), and ask to borrow one for a date range;
 - list, edit and remove their own tools (`/listings`);
 - follow their own requests (`/requests`);
 - approve or decline requests for their tools, and mark loans returned (`/incoming`).

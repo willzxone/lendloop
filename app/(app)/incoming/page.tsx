@@ -1,30 +1,64 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useQuery } from "convex/react";
+import { AlertIcon, CheckCircleIcon, ClockIcon, InboxIcon } from "@/components/icons";
+import { LenderActions } from "@/components/LenderActions";
 import { LoanCard, type LoanView } from "@/components/LoanCard";
-import { Button, EmptyState, FormError, Loading, PageHeader, SectionTitle } from "@/components/ui";
+import { NewToolButton } from "@/components/NewToolButton";
+import { EmptyState, PageHeader, SectionTitle, SkeletonList, StatCard } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
-import { errorMessage } from "@/lib/errors";
 
 export default function IncomingPage() {
   const loans = useQuery(api.loans.incoming);
+  const loading = loans === undefined;
 
-  if (loans === undefined) return <Loading />;
-
-  const waiting = loans.filter((loan) => loan.status === "requested");
-  const active = loans.filter((loan) => loan.status === "approved");
-  const past = loans.filter((loan) => loan.status === "declined" || loan.status === "returned");
+  const waiting = loans?.filter((loan) => loan.status === "requested") ?? [];
+  const active = loans?.filter((loan) => loan.status === "approved") ?? [];
+  const overdue = active.filter((loan) => loan.overdue);
+  const past = loans?.filter((loan) => loan.status === "declined" || loan.status === "returned") ?? [];
 
   return (
     <>
-      <PageHeader title="Incoming requests" description="Requests to borrow your tools." />
-      {loans.length === 0 ? (
-        <EmptyState title="No requests for your tools yet" />
+      <PageHeader
+        eyebrow="Lending"
+        title="Incoming requests"
+        description="People who want to borrow your tools. Every answer is emailed to the borrower."
+      />
+
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Waiting for you"
+          value={waiting.length}
+          icon={<InboxIcon />}
+          tone={waiting.length > 0 ? "green" : "neutral"}
+          loading={loading}
+        />
+        <StatCard label="Lent out or booked" value={active.length} icon={<ClockIcon />} tone="blue" loading={loading} />
+        <StatCard
+          label="Overdue"
+          value={overdue.length}
+          icon={<AlertIcon />}
+          tone={overdue.length > 0 ? "red" : "neutral"}
+          loading={loading}
+          hint={overdue.length > 0 ? "Reminders are going out" : "Nothing late"}
+        />
+        <StatCard label="Completed" value={past.length} icon={<CheckCircleIcon />} tone="violet" loading={loading} />
+      </div>
+
+      {loans === undefined ? (
+        <SkeletonList rows={3} label="Loading requests…" />
+      ) : loans.length === 0 ? (
+        <EmptyState icon={<InboxIcon />} title="No requests for your tools yet" action={<NewToolButton variant="secondary" />}>
+          When a neighbour asks to borrow something, it lands here and you get an email.
+        </EmptyState>
       ) : (
-        <div className="space-y-8">
-          <LoanSection title="Waiting for your answer" loans={waiting} />
-          <LoanSection title="Lent out or booked" loans={active} />
+        <div className="space-y-10">
+          <LoanSection
+            title="Waiting for your answer"
+            description="Approve or decline. If requests overlap, only one of them can be approved."
+            loans={waiting}
+          />
+          <LoanSection title="Lent out or booked" description="Mark a loan returned once you have the tool back." loans={active} />
           <LoanSection title="History" loans={past} />
         </div>
       )}
@@ -32,11 +66,13 @@ export default function IncomingPage() {
   );
 }
 
-function LoanSection({ title, loans }: { title: string; loans: LoanView[] }) {
+function LoanSection({ title, description, loans }: { title: string; description?: string; loans: LoanView[] }) {
   if (loans.length === 0) return null;
   return (
     <section>
-      <SectionTitle count={loans.length}>{title}</SectionTitle>
+      <SectionTitle count={loans.length} description={description}>
+        {title}
+      </SectionTitle>
       <div className="space-y-3">
         {loans.map((loan) => (
           <LoanCard key={loan.id} loan={loan} perspective="lender" actions={<LenderActions loan={loan} />} />
@@ -44,51 +80,4 @@ function LoanSection({ title, loans }: { title: string; loans: LoanView[] }) {
       </div>
     </section>
   );
-}
-
-function LenderActions({ loan }: { loan: LoanView }) {
-  const approve = useMutation(api.loans.approve);
-  const decline = useMutation(api.loans.decline);
-  const markReturned = useMutation(api.loans.markReturned);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function run(action: (args: { loanId: LoanView["id"] }) => Promise<unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action({ loanId: loan.id });
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (loan.status === "requested") {
-    return (
-      <div className="flex flex-col items-end gap-1">
-        <div className="flex gap-2">
-          <Button disabled={busy} onClick={() => run(approve)}>
-            Approve
-          </Button>
-          <Button variant="secondary" disabled={busy} onClick={() => run(decline)}>
-            Decline
-          </Button>
-        </div>
-        <FormError message={error} />
-      </div>
-    );
-  }
-  if (loan.status === "approved") {
-    return (
-      <div className="flex flex-col items-end gap-1">
-        <Button variant="secondary" disabled={busy} onClick={() => run(markReturned)}>
-          Mark returned
-        </Button>
-        <FormError message={error} />
-      </div>
-    );
-  }
-  return null;
 }

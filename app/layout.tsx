@@ -1,28 +1,43 @@
 import { ClerkProvider } from "@clerk/nextjs";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
+import { AppShell } from "@/components/AppShell";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { CurrentUserProvider } from "@/components/CurrentUser";
-import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
+const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
+
 export const metadata: Metadata = {
-  title: "LendLoop",
+  title: { default: "LendLoop", template: "%s · LendLoop" },
   description: "Borrow tools from your neighbours. Lend yours out.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f4f4f5",
+};
+
+/** Clerk's sign-in modal and user menu, matched to the app's look. */
+const clerkAppearance = {
+  variables: {
+    colorPrimary: "#059669",
+    colorText: "#18181b",
+    colorTextSecondary: "#71717a",
+    borderRadius: "0.625rem",
+    fontFamily: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body className="flex min-h-screen flex-col">
-        <ClerkProvider>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className="min-h-screen">
+        <ClerkProvider appearance={clerkAppearance}>
           <ConvexClientProvider>
             <CurrentUserProvider>
-              <SiteHeader />
-              <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
-              <footer className="border-t border-stone-200 py-4 text-center text-xs text-stone-500">
-                LendLoop, a neighbourhood tool-lending board
-              </footer>
+              <AppShell>{children}</AppShell>
             </CurrentUserProvider>
           </ConvexClientProvider>
         </ClerkProvider>
