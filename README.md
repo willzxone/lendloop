@@ -4,6 +4,7 @@ A neighbourhood tool-lending board. People list tools they are happy to lend, ne
 
 Stack: Next.js 16 (App Router) + TypeScript, Clerk for sign-in, Convex for data and backend logic, n8n for the automations, Tailwind for the UI. Built as a take-home exercise. Most of the code was written with an AI assistant, which the brief allows.
 
+- [Live demo](#live-demo)
 - [What it does](#what-it-does)
 - [Architecture](#architecture)
 - [Local setup](#local-setup)
@@ -14,6 +15,14 @@ Stack: Next.js 16 (App Router) + TypeScript, Clerk for sign-in, Convex for data 
 - [Known gaps and changes from the plan](#known-gaps-and-changes-from-the-plan)
 
 Production notes are in [PRODUCTION.md](PRODUCTION.md).
+
+## Live demo
+
+**https://lendloop-kohl.vercel.app** (Next.js on Vercel, Convex cloud, Clerk development instance)
+
+- **Signing in.** Any email works. Clerk shows a small "Development mode" badge because this is a dev instance. To skip the inbox, use an address with `+clerk_test` in it, such as `you+clerk_test@example.com`, and enter `424242` as the code.
+- **Demo data.** The board is seeded with five neighbours, twelve tools and six loans: one overdue, one waiting for an answer, one out on loan, one booked for next week, one returned and one declined (`npx convex run --prod seed:demo`). The demo neighbours can't sign in, so your own dashboard starts empty. Request one of their tools, or list a tool and request it from a second account.
+- **No emails from the live site yet.** n8n isn't hosted for this deployment, so `N8N_NOTIFY_WEBHOOK_URL` is unset there. Convex still writes every notification to the outbox, tries to deliver it, and marks it `failed` with a clear message, which shows up for admins under "Automation failures". The full email flow runs in the [local setup](#local-setup). `deploy/n8n-space/` holds a Hugging Face Space that runs n8n and Mailpit for the cloud deployment. It's built and tested locally but not published.
 
 ## What it does
 
@@ -171,7 +180,7 @@ npm run dev            # http://localhost:3000 (keep `npx convex dev` running to
 ### 6. Demo data and the end-to-end check
 
 ```bash
-npx convex run seed:demo     # Alice lends, Bob borrows: one overdue loan, one pending request
+npx convex run seed:demo     # 5 neighbours, 12 tools, loans in every state (one overdue, one pending)
 npm run verify:e2e           # signed / unsigned / tampered requests against Convex and n8n
 ```
 
@@ -312,7 +321,12 @@ Checked by hand against the running local stack (Convex local backend, n8n 2.49.
 - Exported the workflows from n8n with `n8n export:workflow --all` and searched the output for both secrets. Neither appears there or anywhere in the repo.
 - `next build` passes. With placeholder Clerk keys, every page renders and sends the security headers.
 
-**Not verified:** signing in and clicking through the app in a browser. That needs a real Clerk application, which I couldn't create (see below). The `convex-test` suite covers the signed-in flows at the function level, but nobody has used the pages with a live session yet.
+Checked in a browser with a real Clerk application and test accounts (`lender+clerk_test`, `borrower+clerk_test`, `admin+clerk_test`):
+
+- Local stack: listed a tool as one user, requested it as another and approved it. Both emails ("New request to borrow your …" and "Approved: …") arrived in Mailpit.
+- Live deployment: sign-in, the public list, the overview dashboard and the signed-in pages load from Convex cloud (checked on a phone, see the network note under Known gaps).
+
+**Not verified:** emails sent from the live site, because n8n isn't hosted there yet (see [Live demo](#live-demo)).
 
 ## Known gaps and changes from the plan
 
@@ -324,3 +338,4 @@ Checked by hand against the running local stack (Convex local backend, n8n 2.49.
 - **`proxy.ts` doesn't guard routes.** Clerk 7 deprecates `createRouteMatcher`, and the pages hold no data of their own. Signed-out visitors get a sign-in prompt from `RequireUser`, and Convex refuses their queries.
 - **Times are UTC.** Loan dates are calendar dates compared with today's date in UTC, and the reminder runs at 09:00 UTC.
 - **Making someone an admin is CLI-only**, on purpose (see above).
+- **Some networks block the live data connection.** On one home connection the pages loaded but every list stayed a grey placeholder, because the browser's WebSocket to `*.convex.cloud` was being reset. Chrome uses Encrypted Client Hello for Convex's Cloudflare hosts, and that network resets those handshakes over IPv6 only. Plain TLS to the same host worked, and so did the same ECH handshake over IPv4. Mobile data fixed it, and a test browser forced onto IPv4 loaded fine on the same Wi-Fi.
