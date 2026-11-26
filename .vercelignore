@@ -1,0 +1,9 @@
+.env*
+!.env.example
+n8n/
+deploy/
+tests/
+scripts/
+.next/
+node_modules/
+*.log
